@@ -4,6 +4,9 @@ import csv
 from numpy.core.numeric import NaN
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
+from sklearn.preprocessing import Normalizer
+from sklearn.model_selection import GridSearchCV
+
 # read training & testing data
 def data_loader(train_path, test_path):
     with open(train_path, 'r') as fp:     
@@ -29,8 +32,8 @@ def encode_y(data):
 
 # extract numerical features that we want to use for training
 # ex: [2] => Age, [15] => Satisfication_Score, ...
-def feature_extractor(data_train, data_test, feats):
-    x = data_train[:, feats]
+def feature_extractor(data_trainval, data_test, feats):
+    x = data_trainval[:, feats]
     x = (x.astype(np.float))
     x = np.nan_to_num(x)
 
@@ -38,6 +41,13 @@ def feature_extractor(data_train, data_test, feats):
     x_test = (x_test.astype(np.float))
     x_test = np.nan_to_num(x_test)
     return x, x_test
+
+def normalize(data_trainval, data_test):
+    scaler = Normalizer().fit(data_trainval)
+    data_trainval = scaler.transform(data_trainval)
+    scaler = Normalizer().fit(data_test)
+    data_test = scaler.transform(data_test)
+    return data_trainval, data_test
 
 # Naive Bayes classifier
 def NB(X_train, X_val, y_train, y_val):
@@ -90,6 +100,29 @@ def KNN(X_train, X_val, y_train, y_val):
     #testing
     test_predictions = knn.predict(x_test)
     return test_predictions
+
+def RF(X_train, X_val, y_train, y_val, grid = False):
+    from sklearn.ensemble import RandomForestClassifier
+    rf = RandomForestClassifier(max_depth=50, random_state=0)
+
+    #grid search
+    if grid == True:
+        parameters = {'n_estimators':range(10, 50)}
+        clf = GridSearchCV(rf, parameters)
+        clf.fit(X_train, y_train)
+        print(clf.cv_results_['mean_test_score'])
+
+    rf.fit(X_train, y_train)
+    accuracy = rf.score(X_val, y_val)
+    print('RF accuracy')
+    print(accuracy)
+    rf_predictions = rf.predict(X_val)
+    cm = confusion_matrix(y_val, rf_predictions)
+    print('RF CFmap')
+    print(cm)
+    #testing
+    test_predictions = rf.predict(x_test)
+    return test_predictions
 # output prediction 
 def make_pred(pred):
     with open('pred.csv', 'w', newline='') as fp:
@@ -100,14 +133,19 @@ def make_pred(pred):
 
 data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
 y = np.ravel(encode_y(data_trainval))
-x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 38, 39])
+
 # 2-Age, 7-Number_of_Dependents, 15-Satisfication_Score, 19-Tenure_in_Months, 38-Monthly_Charge, 39-Total_Charges
+x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 38, 39])
+
+#do normalization on data
+x_trainval, x_test = normalize(x_trainval, x_test)
 
 # Split data
 X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 0)
 
 predictions_NB = NB(X_train, X_val, y_train, y_val)
 predictions_KNN = KNN(X_train, X_val, y_train, y_val)
-predictions_SVM = SVM(X_train, X_val, y_train, y_val)
+predictions_RF = RF(X_train, X_val, y_train, y_val, False)
+# predictions_SVM = SVM(X_train, X_val, y_train, y_val)
 
-make_pred(predictions_NB)
+make_pred(predictions_RF)
