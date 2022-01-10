@@ -6,6 +6,8 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import confusion_matrix
 from sklearn.preprocessing import Normalizer
 from sklearn.model_selection import GridSearchCV
+import warnings
+warnings.filterwarnings("ignore")
 
 # read training & testing data
 def data_loader(train_path, test_path):
@@ -29,6 +31,12 @@ def encode_y(data):
     for i in range((len(y))):
         y[i] = int(y[i])
     return y
+
+def encode_other(data):
+    from sklearn.preprocessing import OrdinalEncoder
+    enc = OrdinalEncoder()
+    data = enc.fit_transform(data)
+    return data
 
 # extract numerical features that we want to use for training
 # ex: [2] => Age, [15] => Satisfication_Score, ...
@@ -68,22 +76,46 @@ def NB(X_train, X_val, y_train, y_val):
     test_predictions = gnb.predict(x_test)
     return test_predictions
 # SVM
-def SVM(X_train, X_val, y_train, y_val):
+def SVM(X_train, X_val, y_train, y_val, grid = False):
     from sklearn.svm import SVC
-    svm_model_linear = SVC(kernel = 'linear', C = 1).fit(X_train, y_train)
-    svm_predictions = svm_model_linear.predict(X_val)
     
-    # model accuracy for X_test 
-    accuracy = svm_model_linear.score(X_val, y_val)
-    print('SVM accuracy')
-    print(accuracy)
-    # creating a confusion matrix
-    cm = confusion_matrix(y_val, svm_predictions)
-    print('SVM CFmap')
-    print(cm)
-    #testing
-    test_predictions = svm_model_linear.predict(x_test)
-    return test_predictions
+    # grid search
+    if grid == True:
+        svm = SVC()
+        parameters = {'kernel':['rbf'],
+                    'gamma': [ 1e-4, 1e-3, 1e-2], #, 1e-1, 1
+                    'C': [2e7, 2e8, 2e9, 2e10, 2e11, 2e12, 2e13], #
+                    }
+        clf = GridSearchCV(svm, parameters)#  scoring=['recall_macro', 'precision_macro'], refit=False
+        clf.fit(X_train, y_train)
+        #print(clf.cv_results_['mean_test_score'])
+        svm = clf.best_estimator_
+        svm_predictions = svm.predict(X_val)
+        accuracy = svm.score(X_val, y_val)
+        print('SVM accuracy')
+        print(accuracy)
+        cm = confusion_matrix(y_val, svm_predictions)
+        print('SVM CFmap')
+        print(cm)
+        #testing
+        test_predictions = svm.predict(x_test)
+        return test_predictions
+    
+    if grid == False:
+        svm = SVC(kernel = 'linear', C = 1)
+        svm.fit(X_train, y_train)
+        svm_predictions = svm.predict(X_val)
+        # model accuracy for X_test 
+        accuracy = svm.score(X_val, y_val)
+        print('SVM accuracy')
+        print(accuracy)
+        # creating a confusion matrix
+        cm = confusion_matrix(y_val, svm_predictions)
+        print('SVM CFmap')
+        print(cm)
+        #testing
+        test_predictions = svm.predict(x_test)
+        return test_predictions
 # KNN
 def KNN(X_train, X_val, y_train, y_val):
     from sklearn.neighbors import KNeighborsClassifier
@@ -100,31 +132,43 @@ def KNN(X_train, X_val, y_train, y_val):
     #testing
     test_predictions = knn.predict(x_test)
     return test_predictions
-
+# Random Forest
 def RF(X_train, X_val, y_train, y_val, grid = False):
     from sklearn.ensemble import RandomForestClassifier
-    rf = RandomForestClassifier(max_depth=50, random_state=0)
 
     #grid search
     if grid == True:
-        parameters = {'n_estimators':range(10, 50)}
+        rf = RandomForestClassifier()
+        parameters = {'n_estimators':range(30, 100, 5)}
         clf = GridSearchCV(rf, parameters)
         clf.fit(X_train, y_train)
-        print(clf.cv_results_['mean_test_score'])
+        rf = clf.best_estimator_
+        rf_predictions = rf.predict(X_val)
+        accuracy = rf.score(X_val, y_val)
+        print('RF accuracy')
+        print(accuracy)
+        cm = confusion_matrix(y_val, rf_predictions)
+        print('RF CFmap')
+        print(cm)
+        #testing
+        test_predictions = rf.predict(x_test)
+        return test_predictions
 
-    rf.fit(X_train, y_train)
-    accuracy = rf.score(X_val, y_val)
-    print('RF accuracy')
-    print(accuracy)
-    rf_predictions = rf.predict(X_val)
-    cm = confusion_matrix(y_val, rf_predictions)
-    print('RF CFmap')
-    print(cm)
-    #testing
-    test_predictions = rf.predict(x_test)
-    return test_predictions
+    if grid == False:
+        rf = RandomForestClassifier()
+        rf.fit(X_train, y_train)
+        accuracy = rf.score(X_val, y_val)
+        print('RF accuracy')
+        print(accuracy)
+        rf_predictions = rf.predict(X_val)
+        cm = confusion_matrix(y_val, rf_predictions)
+        print('RF CFmap')
+        print(cm)
+        #testing
+        test_predictions = rf.predict(x_test)
+        return test_predictions
 # output prediction 
-def make_pred(pred):
+def make_pred(pred, test_id):
     with open('pred.csv', 'w', newline='') as fp:
         writer = csv.writer(fp)
         writer.writerow(['Customer ID', 'Churn Category'])
@@ -134,18 +178,22 @@ def make_pred(pred):
 data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
 y = np.ravel(encode_y(data_trainval))
 
+# data_trainval = encode_other(data_trainval)
+# data_test = encode_other(data_test)
+
 # 2-Age, 7-Number_of_Dependents, 15-Satisfication_Score, 19-Tenure_in_Months, 38-Monthly_Charge, 39-Total_Charges
+# [2, 7, 15, 19, 38, 39]
 x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 38, 39])
 
 #do normalization on data
 x_trainval, x_test = normalize(x_trainval, x_test)
 
 # Split data
-X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 0)
+X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 1126, train_size = 0.8)
 
-predictions_NB = NB(X_train, X_val, y_train, y_val)
-predictions_KNN = KNN(X_train, X_val, y_train, y_val)
-predictions_RF = RF(X_train, X_val, y_train, y_val, False)
-# predictions_SVM = SVM(X_train, X_val, y_train, y_val)
+# predictions_NB = NB(X_train, X_val, y_train, y_val)
+# predictions_KNN = KNN(X_train, X_val, y_train, y_val)
+predictions_RF = RF(X_train, X_val, y_train, y_val, True)
+# predictions_SVM = SVM(X_train, X_val, y_train, y_val, False)
 
-make_pred(predictions_RF)
+make_pred(predictions_RF, test_id)
