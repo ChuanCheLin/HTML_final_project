@@ -1,11 +1,14 @@
-from re import split
 import numpy as np
 import csv
+from numpy.core.defchararray import encode
 from numpy.core.numeric import NaN
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import confusion_matrix
+from sklearn.metrics import confusion_matrix,  f1_score
 from sklearn.preprocessing import Normalizer
 from sklearn.model_selection import GridSearchCV
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -15,7 +18,7 @@ def data_loader(train_path, test_path):
         data_train = list(csv.reader(fp))
         train_id = np.array(data_train[1:])[:, :1]
         data_train = np.array(data_train[1:])[:, 1:]
-    
+        
     with open(test_path, 'r') as fp:     
         data_test = list(csv.reader(fp))
         test_id = np.array(data_test[1:])
@@ -32,15 +35,18 @@ def encode_y(data):
         y[i] = int(y[i])
     return y
 
-def encode_other(data):
+#encode other non-number features
+def encode_other(data, feats):
     from sklearn.preprocessing import OrdinalEncoder
     enc = OrdinalEncoder()
-    data = enc.fit_transform(data)
+    for i in feats:
+        data[:, i:i+1] = enc.fit_transform(data[:, i:i+1]) # 35 contract
     return data
 
 # extract numerical features that we want to use for training
 # ex: [2] => Age, [15] => Satisfication_Score, ...
 def feature_extractor(data_trainval, data_test, feats):
+
     x = data_trainval[:, feats]
     x = (x.astype(np.float))
     x = np.nan_to_num(x)
@@ -75,47 +81,6 @@ def NB(X_train, X_val, y_train, y_val):
     #testing
     test_predictions = gnb.predict(x_test)
     return test_predictions
-# SVM
-def SVM(X_train, X_val, y_train, y_val, grid = False):
-    from sklearn.svm import SVC
-    
-    # grid search
-    if grid == True:
-        svm = SVC()
-        parameters = {'kernel':['rbf'],
-                    'gamma': [ 1e-4, 1e-3, 1e-2], #, 1e-1, 1
-                    'C': [2e7, 2e8, 2e9, 2e10, 2e11, 2e12, 2e13], #
-                    }
-        clf = GridSearchCV(svm, parameters)#  scoring=['recall_macro', 'precision_macro'], refit=False
-        clf.fit(X_train, y_train)
-        #print(clf.cv_results_['mean_test_score'])
-        svm = clf.best_estimator_
-        svm_predictions = svm.predict(X_val)
-        accuracy = svm.score(X_val, y_val)
-        print('SVM accuracy')
-        print(accuracy)
-        cm = confusion_matrix(y_val, svm_predictions)
-        print('SVM CFmap')
-        print(cm)
-        #testing
-        test_predictions = svm.predict(x_test)
-        return test_predictions
-    
-    if grid == False:
-        svm = SVC(kernel = 'linear', C = 1)
-        svm.fit(X_train, y_train)
-        svm_predictions = svm.predict(X_val)
-        # model accuracy for X_test 
-        accuracy = svm.score(X_val, y_val)
-        print('SVM accuracy')
-        print(accuracy)
-        # creating a confusion matrix
-        cm = confusion_matrix(y_val, svm_predictions)
-        print('SVM CFmap')
-        print(cm)
-        #testing
-        test_predictions = svm.predict(x_test)
-        return test_predictions
 # KNN
 def KNN(X_train, X_val, y_train, y_val):
     from sklearn.neighbors import KNeighborsClassifier
@@ -132,6 +97,38 @@ def KNN(X_train, X_val, y_train, y_val):
     #testing
     test_predictions = knn.predict(x_test)
     return test_predictions
+# SVM
+def SVM(X_train, X_val, y_train, y_val, grid = False):
+    from sklearn.svm import SVC
+    
+    # grid search
+    if grid == True:
+        svm = SVC()
+        parameters = {'kernel':['rbf'],
+                    'gamma': [ 1e-4, 1e-3, 1e-2], #, 1e-1, 1
+                    'C': [2e7, 2e8, 2e9, 2e10, 2e11, 2e12, 2e13], #
+                    }
+        clf = GridSearchCV(svm, parameters)#  scoring=['recall_macro', 'precision_macro'], refit=False
+        clf.fit(X_train, y_train)
+        print(clf.best_params_)
+        svm = clf.best_estimator_
+    
+    if grid == False:
+        svm = SVC(kernel = 'rbf', C = 1)
+        svm.fit(X_train, y_train)
+
+    svm_predictions = svm.predict(X_val)
+    accuracy = svm.score(X_val, y_val)
+    print('SVM accuracy')
+    print(accuracy)
+    cm = confusion_matrix(y_val, svm_predictions)
+    print('SVM CFmap')
+    print(cm)
+    print('RF f1 score')
+    print(f1_score(y_val, svm_predictions, average = 'macro'))
+    #testing
+    test_predictions = svm.predict(x_test)
+    return test_predictions
 # Random Forest
 def RF(X_train, X_val, y_train, y_val, grid = False):
     from sklearn.ensemble import RandomForestClassifier
@@ -139,34 +136,64 @@ def RF(X_train, X_val, y_train, y_val, grid = False):
     #grid search
     if grid == True:
         rf = RandomForestClassifier()
-        parameters = {'n_estimators':range(30, 100, 5)}
+        parameters = {'n_estimators':range(100, 1000, 100)}
         clf = GridSearchCV(rf, parameters)
         clf.fit(X_train, y_train)
         rf = clf.best_estimator_
-        rf_predictions = rf.predict(X_val)
-        accuracy = rf.score(X_val, y_val)
-        print('RF accuracy')
-        print(accuracy)
-        cm = confusion_matrix(y_val, rf_predictions)
-        print('RF CFmap')
-        print(cm)
-        #testing
-        test_predictions = rf.predict(x_test)
-        return test_predictions
 
     if grid == False:
         rf = RandomForestClassifier()
         rf.fit(X_train, y_train)
-        accuracy = rf.score(X_val, y_val)
-        print('RF accuracy')
-        print(accuracy)
-        rf_predictions = rf.predict(X_val)
-        cm = confusion_matrix(y_val, rf_predictions)
-        print('RF CFmap')
-        print(cm)
-        #testing
-        test_predictions = rf.predict(x_test)
-        return test_predictions
+    
+    #result
+    rf_predictions = rf.predict(X_val)
+    accuracy = rf.score(X_val, y_val)
+    print('RF accuracy')
+    print(accuracy)
+    cm = confusion_matrix(y_val, rf_predictions)
+    print('RF CFmap')
+    print(cm)
+    print('RF f1 score')
+    print(f1_score(y_val, rf_predictions, average = 'macro'))
+    #testing
+    test_predictions = rf.predict(x_test)
+    return test_predictions
+
+def GradientBoosting(X_train, X_val, y_train, y_val, grid):
+    from sklearn.ensemble import GradientBoostingClassifier
+
+    if grid == True:
+        gb = GradientBoostingClassifier()
+        parameters = {'n_estimators': range(100, 500, 100),
+                      'learning_rate': [0.01, 0.05, 0.1, 0.5, 1]
+                      }
+        clf = GridSearchCV(gb, parameters)
+        clf.fit(X_train, y_train)
+        print(clf.best_params_)
+        gb = clf.best_estimator_
+
+    else:
+        gb = GradientBoostingClassifier(n_estimators = 100, learning_rate = 0.1, random_state = 1126)
+        gb = Pipeline([ #('pca', PCA(n_components = 5)),
+                        ('clf', gb)
+                    ])
+        gb.fit(X_train, y_train)
+
+    # model accuracy for X_test 
+    accuracy = gb.score(X_val, y_val)
+    print('GB accuracy')
+    print(accuracy)
+    # creating a confusion matrix
+    gb_predictions = gb.predict(X_val)
+    cm = confusion_matrix(y_val, gb_predictions)
+    print('GB CFmap')
+    print(cm)
+    print('GB f1 score')
+    print(f1_score(y_val, gb_predictions, average = 'macro'))
+    #testing
+    test_predictions = gb.predict(x_test)
+    return test_predictions
+
 # output prediction 
 def make_pred(pred, test_id):
     with open('pred.csv', 'w', newline='') as fp:
@@ -178,22 +205,32 @@ def make_pred(pred, test_id):
 data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
 y = np.ravel(encode_y(data_trainval))
 
-# data_trainval = encode_other(data_trainval)
-# data_test = encode_other(data_test)
+#for non-number_data
+data_trainval = encode_other(data_trainval, [20, 21, 35])
+data_test = encode_other(data_test, [20, 21, 35])
 
-# 2-Age, 7-Number_of_Dependents, 15-Satisfication_Score, 19-Tenure_in_Months, 38-Monthly_Charge, 39-Total_Charges
+# feature extraction
+# 2-Age, 7-Number_of_Dependents, 15-Satisfication_Score, 19-Tenure_in_Months, 35 Contract, 38-Monthly_Charge, 39-Total_Charges
 # [2, 7, 15, 19, 38, 39]
-x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 38, 39])
+x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 20, 21, 22, 35, 38, 39])
 
-#do normalization on data
-x_trainval, x_test = normalize(x_trainval, x_test)
+# do normalization on data
+# x_trainval, x_test = normalize(x_trainval, x_test)
 
 # Split data
 X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 1126, train_size = 0.8)
 
+# upsampling
+from imblearn.over_sampling import SMOTE
+smt = SMOTE(random_state=0)
+X_train, y_train = smt.fit_resample(x_trainval, y)
+from collections import Counter
+print(sorted(Counter(y_train).items()))
+
 # predictions_NB = NB(X_train, X_val, y_train, y_val)
 # predictions_KNN = KNN(X_train, X_val, y_train, y_val)
-predictions_RF = RF(X_train, X_val, y_train, y_val, True)
-# predictions_SVM = SVM(X_train, X_val, y_train, y_val, False)
+# predictions_RF = RF(X_train, X_val, y_train, y_val, False)
+# predictions_SVM = SVM(X_train, X_val, y_train, y_val, True)
+predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, True)
 
-make_pred(predictions_RF, test_id)
+make_pred(predictions_GB, test_id)
