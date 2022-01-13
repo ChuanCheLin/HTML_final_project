@@ -1,3 +1,4 @@
+from re import X
 import numpy as np
 import csv
 from numpy.core.defchararray import encode
@@ -159,7 +160,7 @@ def RF(X_train, X_val, y_train, y_val, grid = False):
     test_predictions = rf.predict(x_test)
     return test_predictions
 
-def GradientBoosting(X_train, X_val, y_train, y_val, grid):
+def GradientBoosting(X_train, X_val, y_train, y_val, grid = False):
     from sklearn.ensemble import GradientBoostingClassifier
 
     if grid == True:
@@ -179,7 +180,7 @@ def GradientBoosting(X_train, X_val, y_train, y_val, grid):
                     ])
         gb.fit(X_train, y_train)
 
-    # model accuracy for X_test 
+    # Validation
     accuracy = gb.score(X_val, y_val)
     print('GB accuracy')
     print(accuracy)
@@ -190,7 +191,18 @@ def GradientBoosting(X_train, X_val, y_train, y_val, grid):
     print(cm)
     print('GB f1 score')
     print(f1_score(y_val, gb_predictions, average = 'macro'))
-    #testing
+    # add validation-set into sub-training set
+    X_trainval = np.vstack((np.array(X_train), np.array(X_val)))
+    y_trainval = np.hstack((np.array(y_train), np.array(y_val)))
+
+    # retraining w/ full training set
+    if grid == True:
+        gb = GradientBoostingClassifier(clf.best_params_)
+    else:
+        gb = GradientBoostingClassifier(n_estimators = 400, learning_rate = 0.5, random_state = 1126)
+
+    gb.fit(X_trainval, y_trainval)
+    # testing
     test_predictions = gb.predict(x_test)
     return test_predictions
 
@@ -204,26 +216,31 @@ def make_pred(pred, test_id):
 
 data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
 y = np.ravel(encode_y(data_trainval))
+# encode non-float data
+data_trainval = encode_other(data_trainval, [17, 20, 21, 35])
+data_test = encode_other(data_test, [17, 20, 21, 35])
 
-#for non-number_data
-data_trainval = encode_other(data_trainval, [20, 21, 35])
-data_test = encode_other(data_test, [20, 21, 35])
+# feature extraction - non-label
+# 19-Tenure_in_Months, 22-Avg_Monthly_Long_Distance_Charges,
+# 38-Monthly_Charge, 39-Total_Charges...43 money-related data
+x_trainval, x_test = feature_extractor(data_trainval, data_test, [19, 22] + list(range(38,43)))
 
-# feature extraction
-# 2-Age, 7-Number_of_Dependents, 15-Satisfication_Score, 19-Tenure_in_Months, 35 Contract, 38-Monthly_Charge, 39-Total_Charges
-# [2, 7, 15, 19, 38, 39]
-x_trainval, x_test = feature_extractor(data_trainval, data_test, [2, 7, 15, 19, 20, 21, 22, 35, 38, 39])
-
-# do normalization on data
+# do normalization
 # x_trainval, x_test = normalize(x_trainval, x_test)
+
+# feature extraction - non-float
+# 15-Satisfication_Score, 17-Referred_a_Friend, 20-Offer, 21-Phone_Service, 35-contract
+x_trainval_la, x_test_la = feature_extractor(data_trainval, data_test, [15, 17, 20, 21, 35])
+x_trainval = np.hstack((x_trainval, x_trainval_la))
+x_test = np.hstack((x_test, x_test_la))
 
 # Split data
 X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 1126, train_size = 0.8)
 
-# upsampling
+# upsampling on training data only
 from imblearn.over_sampling import SMOTE
-smt = SMOTE(random_state=0)
-X_train, y_train = smt.fit_resample(x_trainval, y)
+smt = SMOTE(random_state = 1126)
+X_train, y_train = smt.fit_resample(X_train, y_train)
 from collections import Counter
 print(sorted(Counter(y_train).items()))
 
@@ -231,6 +248,6 @@ print(sorted(Counter(y_train).items()))
 # predictions_KNN = KNN(X_train, X_val, y_train, y_val)
 # predictions_RF = RF(X_train, X_val, y_train, y_val, False)
 # predictions_SVM = SVM(X_train, X_val, y_train, y_val, True)
-predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, True)
+predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, False)
 
 make_pred(predictions_GB, test_id)
