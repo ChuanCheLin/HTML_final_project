@@ -266,6 +266,6 @@ print(sorted(Counter(y_train).items()))
 # predictions_KNN = KNN(X_train, X_val, y_train, y_val)
 # predictions_RF = RF(X_train, X_val, y_train, y_val, grid_search)
 # predictions_SVM = SVM(X_train, X_val, y_train, y_val, grid_search)
-predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, gird = grid_search)
+predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, grid = grid_search)
 
 make_pred(predictions_GB, test_id)
