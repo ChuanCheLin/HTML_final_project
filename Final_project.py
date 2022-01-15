@@ -216,11 +216,17 @@ def make_pred(pred, test_id):
         for i, p in enumerate(pred): 
             writer.writerow([test_id[i, 0], int(p)])
 
-data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
-y = np.ravel(encode_y(data_trainval))
+# Selections
+upsample = True
+normalization = True
+grid_search = False
 # feats - numerical, feats_la - non-numerical
 feats = [19, 22] + list(range(38,44))
 feats_la =  [15, 17, 20, 21, 24, 25, 34, 35] + list(range(27,31))
+
+# load data
+data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
+y = np.ravel(encode_y(data_trainval))
 
 # encode non-numerical data
 data_trainval, data_test = encode_other(data_trainval, data_test, feats_la, y)
@@ -231,7 +237,8 @@ data_trainval, data_test = encode_other(data_trainval, data_test, feats_la, y)
 x_trainval, x_test = feature_extractor(data_trainval, data_test, feats)
 
 # do normalization
-x_trainval, x_test = normalize(x_trainval, x_test)
+if normalization == True:
+    x_trainval, x_test = normalize(x_trainval, x_test)
 
 # feature extraction - non-numerical
 # 15-Satisfication_Score, 17-Referred_a_Friend, 20-Offer, 21-Phone_Service, 35-contract
@@ -245,9 +252,10 @@ x_test = np.hstack((x_test, x_test_la))
 X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 1126, train_size = 0.8)
 
 # upsampling on training data only
-from imblearn.over_sampling import SMOTE
-smt = SMOTE(random_state = 1126)
-X_train, y_train = smt.fit_resample(X_train, y_train)
+if upsample == True:
+    from imblearn.over_sampling import SMOTE
+    smt = SMOTE(random_state = 1126)
+    X_train, y_train = smt.fit_resample(X_train, y_train)
 
 #
 from collections import Counter
@@ -256,8 +264,8 @@ print(sorted(Counter(y_train).items()))
 
 # predictions_NB = NB(X_train, X_val, y_train, y_val)
 # predictions_KNN = KNN(X_train, X_val, y_train, y_val)
-# predictions_RF = RF(X_train, X_val, y_train, y_val, False)
-# predictions_SVM = SVM(X_train, X_val, y_train, y_val, True)
-predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, False)
+# predictions_RF = RF(X_train, X_val, y_train, y_val, grid_search)
+# predictions_SVM = SVM(X_train, X_val, y_train, y_val, grid_search)
+predictions_GB = GradientBoosting(X_train, X_val, y_train, y_val, gird = grid_search)
 
 make_pred(predictions_GB, test_id)
