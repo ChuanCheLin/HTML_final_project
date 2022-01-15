@@ -37,12 +37,14 @@ def encode_y(data):
     return y
 
 #encode other non-number features
-def encode_other(data, feats):
-    from sklearn.preprocessing import OrdinalEncoder
-    enc = OrdinalEncoder()
+def encode_other(data, data_test, feats, y):
+    from category_encoders.target_encoder import TargetEncoder
+
     for i in feats:
-        data[:, i:i+1] = enc.fit_transform(data[:, i:i+1]) # 35 contract
-    return data
+        enc = TargetEncoder()
+        data[:, i:i+1] = enc.fit_transform(data[:, i:i+1], y)
+        data_test[:, i:i+1]  = enc.transform(data_test[:, i:i+1])
+    return data, data_test
 
 # extract numerical features that we want to use for training
 # ex: [2] => Age, [15] => Satisfication_Score, ...
@@ -174,7 +176,7 @@ def GradientBoosting(X_train, X_val, y_train, y_val, grid = False):
         gb = clf.best_estimator_
 
     else:
-        gb = GradientBoostingClassifier(n_estimators = 100, learning_rate = 0.1, random_state = 1126)
+        gb = GradientBoostingClassifier(n_estimators = 400, learning_rate = 0.5, random_state = 1126)
         gb = Pipeline([ #('pca', PCA(n_components = 5)),
                         ('clf', gb)
                     ])
@@ -216,22 +218,27 @@ def make_pred(pred, test_id):
 
 data_trainval, train_id, data_test, test_id = data_loader('trainval_data.csv','Test_data.csv')
 y = np.ravel(encode_y(data_trainval))
-# encode non-float data
-data_trainval = encode_other(data_trainval, [17, 20, 21, 35])
-data_test = encode_other(data_test, [17, 20, 21, 35])
+# feats - numerical, feats_la - non-numerical
+feats = [19, 22] + list(range(38,44))
+feats_la =  [15, 17, 20, 21, 24, 25, 34, 35] + list(range(27,31))
 
-# feature extraction - non-label
+# encode non-numerical data
+data_trainval, data_test = encode_other(data_trainval, data_test, feats_la, y)
+
+# feature extraction - numerical
 # 19-Tenure_in_Months, 22-Avg_Monthly_Long_Distance_Charges,
 # 38-Monthly_Charge, 39-Total_Charges...43 money-related data
-x_trainval, x_test = feature_extractor(data_trainval, data_test, [19, 22] + list(range(38,43)))
+x_trainval, x_test = feature_extractor(data_trainval, data_test, feats)
 
 # do normalization
-# x_trainval, x_test = normalize(x_trainval, x_test)
+x_trainval, x_test = normalize(x_trainval, x_test)
 
-# feature extraction - non-float
+# feature extraction - non-numerical
 # 15-Satisfication_Score, 17-Referred_a_Friend, 20-Offer, 21-Phone_Service, 35-contract
-x_trainval_la, x_test_la = feature_extractor(data_trainval, data_test, [15, 17, 20, 21, 35])
+x_trainval_la, x_test_la = feature_extractor(data_trainval, data_test, feats_la)
 x_trainval = np.hstack((x_trainval, x_trainval_la))
+print('number of features: {:4d}' 
+        .format(len(x_trainval[0])))
 x_test = np.hstack((x_test, x_test_la))
 
 # Split data
@@ -241,7 +248,10 @@ X_train, X_val, y_train, y_val = train_test_split(x_trainval, y, random_state = 
 from imblearn.over_sampling import SMOTE
 smt = SMOTE(random_state = 1126)
 X_train, y_train = smt.fit_resample(X_train, y_train)
+
+#
 from collections import Counter
+print('number of samples:')
 print(sorted(Counter(y_train).items()))
 
 # predictions_NB = NB(X_train, X_val, y_train, y_val)
