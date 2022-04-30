@@ -1,7 +1,8 @@
-# Final Project of an NTU Machine Learning Course instructed by Hsuan-Tien Lin
+# Final Project of an NTU Machine Learning Course 
 
 Develop linear, non-linear and NN models for data from a telephone company.  
 Course info: https://www.csie.ntu.edu.tw/~htlin/course/ml21fall/  
+instructed by Hsuan-Tien Lin
 
 ## Kaggle
 
